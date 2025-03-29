@@ -1,0 +1,29 @@
+{
+    "name": "nycu-cv",
+    "image": "lnfu/nycu-cv",
+    "runArgs": [
+        "--gpus=all",
+        "--shm-size=16gb"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.black-formatter",
+                "ms-python.isort",
+                "njpwerner.autodocstring"
+            ],
+            "settings": {
+                "python.formatting.provider": "black",
+                "[python]": {
+                    "editor.defaultFormatter": "ms-python.black-formatter",
+                    "editor.formatOnSave": true,
+                    "editor.codeActionsOnSave": [
+                        "source.organizeImports"
+                    ]
+                }
+            }
+        }
+    },
+    "remoteUser": "ubuntu"
+}
