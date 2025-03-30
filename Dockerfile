@@ -23,6 +23,8 @@ RUN pip install --index-url https://download.pytorch.org/whl/cu126 --extra-index
     torchaudio==2.6.0+cu126 \
     torchvision==0.21.0+cu126
 
+RUN pip install uv --break-system-packages
+
 RUN echo "ubuntu:ubuntu" | chpasswd
 
 RUN usermod -aG sudo ubuntu

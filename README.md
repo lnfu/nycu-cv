@@ -13,6 +13,6 @@ This repository contains assignments for the Selected Topics in Visual Recogniti
 ## 📌 Assignments Overview
 
 1. **Assignment 1:** Transfer learning using ResNet for 100-class image classification.
-2. **Assignment 2:** TBA
+2. **Assignment 2:** Digit Recognition using Faster R-CNN.
 3. **Assignment 3:** TBA
 4. **Assignment 4:** TBA
