@@ -1,10 +1,13 @@
+import datetime
 import logging
-import pathlib
 
 import torch
 import torchvision
-import tqdm
+from nycu_cv_hw2.constants import LOG_DIR_PATH, MODEL_DIR_PATH
 from nycu_cv_hw2.data import train_loader, val_loader
+from nycu_cv_hw2.trainer import Trainer
+from nycu_cv_hw2.utils import eprint
+from torch.utils.tensorboard import SummaryWriter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,12 +18,19 @@ logging.basicConfig(
 
 
 def main():
+    # Tensorboard
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    writer = SummaryWriter(LOG_DIR_PATH / current_time)
 
+    # Device
     device = torch.torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"device: {device}")
+    writer.add_text("Device", device.type)
 
     # Model
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+        weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+    )
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = (
         torchvision.models.detection.faster_rcnn.FastRCNNPredictor(
@@ -32,47 +42,18 @@ def main():
     # Optimizer
     optimizer = torch.optim.SGD(model.parameters())
 
+    # Trainer
+    trainer = Trainer(model, optimizer, device, writer)
+
     # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
     try:
-        num_epoch = 10  # TODO
-        for epoch in range(num_epoch):
-            model.train()
-            for inputs, labels in tqdm.tqdm(
-                train_loader, desc=f"Epoch {epoch + 1}/{num_epoch}", ncols=100
-            ):
-                inputs = [input.to(device) for input in inputs]  # input = image
-                labels = [{k: v.to(device) for k, v in t.items()} for t in labels]
-
-                optimizer.zero_grad()
-
-                loss_dict = model(inputs, labels)
-                # TODO 試試看加權
-                losses = sum(loss for loss in loss_dict.values())
-
-                # backward propagation
-                losses.backward()
-                optimizer.step()
-
-                # running_loss += losses.item()
-
-            model.eval()  # dropout/batchnorm
-            with torch.no_grad():  # autograd
-
-                for inputs, labels in tqdm.tqdm(
-                    val_loader, desc=f"Epoch {epoch + 1}/{num_epoch}", ncols=100
-                ):
-                    inputs = [input.to(device) for input in inputs]  # input = image
-                    labels = [{k: v.to(device) for k, v in t.items()} for t in labels]
-
-                    loss_dict = model(inputs, labels)
-                    # TODO 試試看加權
-                    losses = sum(loss for loss in loss_dict.values())
-
+        trainer.train(train_loader, val_loader)
     except KeyboardInterrupt:
-        logging.warning("Training interrupted! Saving model before exiting...")
+        eprint("Training interrupted! Saving model before exiting...")
     finally:
-        # save model
+        torch.save(model, MODEL_DIR_PATH / f"{current_time}.pt")
+        eprint(f"Model: {current_time}.pt")
         pass
 
 

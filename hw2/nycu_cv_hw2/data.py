@@ -57,12 +57,12 @@ train_loader = torch.utils.data.DataLoader(
     batch_size=16,
     shuffle=True,
     num_workers=4,
-    collate_fn=collate_fn,  # TODO
+    collate_fn=collate_fn,
 )
 val_loader = torch.utils.data.DataLoader(
     val_dataset,
     batch_size=16,
     shuffle=False,
     num_workers=4,
-    collate_fn=collate_fn,  # TODO
+    collate_fn=collate_fn,
 )

@@ -1,2 +1,4 @@
 data/*
+logs/*
+models/*
 !data/README.md
