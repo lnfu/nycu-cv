@@ -2,3 +2,9 @@ data/*
 logs/*
 models/*
 !data/README.md
+pred.csv
+pred.json
+pred.zip
+
+# Ignore dynaconf secret files
+.secrets.*

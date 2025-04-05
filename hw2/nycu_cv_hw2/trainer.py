@@ -14,6 +14,8 @@ from torchmetrics import ConfusionMatrix
 class Trainer:
 
     _scaler = GradScaler()
+    min_train_loss = float("inf")  # TODO not used
+    min_val_loss = float("inf")  # TODO not used
 
     def __init__(
         self,
@@ -21,11 +23,13 @@ class Trainer:
         optimizer: torch.optim.Optimizer,
         device: torch.device,
         writer: SummaryWriter,
+        score_threshold: float,
     ):
         self._model = model.to(device)
         self._optimizer = optimizer
         self._device = device
         self._writer = writer
+        self._score_threshold = score_threshold
 
     def train_batch(self, inputs: list, targets: list) -> float:
         self._model.train()
@@ -103,7 +107,7 @@ class Trainer:
                 target_boxes = target["boxes"]
                 target_labels = target["labels"]
 
-                score_filter = output["scores"] > 0.2  # TODO
+                score_filter = output["scores"] > self._score_threshold
                 output_boxes = output["boxes"][score_filter]
                 output_labels = output["labels"][score_filter]
 
@@ -132,12 +136,10 @@ class Trainer:
                 matched_output_indices = set()
                 matched_pairs = []
 
-                # https://stackoverflow.com/questions/46110545/whats-the-correct-way-to-compute-a-confusion-matrix-for-object-detection
-
                 while True:
                     # 找到最大的 IoU
                     max_iou = iou_matrix.max()
-                    if max_iou < 0.5:  # 全部都 < 0.5 就結束迴圈
+                    if max_iou < 0.5:  # 全部都 < 0.5 就結束迴圈 TODO 0.5 or other #???
                         break
 
                     # 找到最大的 IoU 的 index
@@ -178,12 +180,11 @@ class Trainer:
                 )
 
         cm = cm.compute()
-        eprint(cm)  # TODO
         df_cm = pd.DataFrame(
             cm.cpu().numpy(), index=range(10 + 1), columns=range(10 + 1)
-        )  # TODO
+        )
         fig, ax = plt.subplots(figsize=(10, 7))
-        sns.heatmap(df_cm, ax=ax, annot=True, cmap="Spectral")
+        sns.heatmap(df_cm, ax=ax, annot=True, cmap="Spectral", fmt="g")
         self._writer.add_figure(
             f"Confusion_Matrix (Validation)",
             fig,
@@ -192,15 +193,37 @@ class Trainer:
 
         return total_loss / len(data_loader)
 
-    def train(self, train_loader, val_loader, num_epochs=10):
+    def train(
+        self,
+        train_loader: torch.utils.data.DataLoader,
+        val_loader: torch.utils.data.DataLoader,
+        num_epochs: int,
+    ):
         for epoch in range(num_epochs):
             train_loss = self.train_epoch(epoch, train_loader)
             val_loss = self.val_epoch(epoch, val_loader)
+
+            self.min_train_loss = min(self.min_train_loss, train_loss)
+            self.min_val_loss = min(self.min_val_loss, val_loss)
 
             self._writer.add_scalars(
                 "Loss", {"Train": train_loss, "Validation": val_loss}, epoch
             )
 
+            self._writer.add_hparams(
+                hparam_dict={
+                    "lr": self._optimizer.param_groups[0]["lr"],
+                    "num_epochs": num_epochs,
+                    "train_batch_size": train_loader.batch_size,
+                    "val_batch_size": val_loader.batch_size,
+                    "score_threshold": self._score_threshold,
+                },
+                metric_dict={
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                },
+            )
+
             logging.info(
-                f"Epoch {epoch+1}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}",
+                f"Epoch {epoch+1}: Train Loss: {train_loss:.3f}, Val Loss: {val_loss:.3f}",
             )

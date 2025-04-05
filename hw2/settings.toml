@@ -1,0 +1,9 @@
+[default]
+num_epochs = 20
+batch_size = 32
+score_threshold = 0.5
+
+[dev]
+num_epochs = 20
+batch_size = 16
+score_threshold = 0.5

@@ -1,27 +1,63 @@
 import logging
 import pathlib
+import typing
 
 import torch
 import torchvision
 from nycu_cv_hw2.constants import DATA_DIR_PATH
+from PIL import Image, ImageFile
+
+
+class TestDataset(torch.utils.data.Dataset):
+    _img_file_paths: typing.List[pathlib.Path]
+
+    def __init__(
+        self,
+        image_dir_path: typing.Union[str, pathlib.Path],
+        transform: typing.Optional[typing.Callable] = None,
+    ):
+        if isinstance(image_dir_path, str):
+            image_dir_path = pathlib.Path(image_dir_path)
+
+        if not isinstance(image_dir_path, pathlib.Path):
+            raise ValueError()  # TODO
+
+        # 字典序
+        self._img_file_paths = sorted(pathlib.Path(image_dir_path).glob("*.png"))
+        self._transform = transform
+
+    def __len__(self) -> int:
+        return len(self._img_file_paths)
+
+    def __getitem__(self, idx) -> typing.Tuple[ImageFile.ImageFile, str]:
+        img_file_path = self._img_file_paths[idx]
+        img = Image.open(img_file_path).convert("RGB")
+        if self._transform:
+            img = self._transform(img)
+        return img, img_file_path.stem
+
 
 # Dataset
 train_dataset = torchvision.datasets.CocoDetection(
     root=DATA_DIR_PATH / "train",
     annFile=DATA_DIR_PATH / "train.json",
-    transform=torchvision.transforms.transforms.ToTensor(),  # TODO
+    transform=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
     target_transform=None,
 )
 val_dataset = torchvision.datasets.CocoDetection(
     root=DATA_DIR_PATH / "valid",
     annFile=DATA_DIR_PATH / "valid.json",
-    transform=torchvision.transforms.transforms.ToTensor(),  # TODO
+    transform=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
     target_transform=None,
+)
+test_dataset = TestDataset(
+    image_dir_path=DATA_DIR_PATH / "test",
+    transform=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
 )
 
 
 # DataLoader
-def collate_fn(batch):
+def train_and_val_collate_fn(batch):
     inputs, labels = zip(*batch)
 
     new_labels = []
@@ -52,17 +88,29 @@ def collate_fn(batch):
     return list(inputs), new_labels
 
 
-train_loader = torch.utils.data.DataLoader(
-    train_dataset,
-    batch_size=16,
-    shuffle=True,
-    num_workers=4,
-    collate_fn=collate_fn,
-)
-val_loader = torch.utils.data.DataLoader(
-    val_dataset,
-    batch_size=16,
-    shuffle=False,
-    num_workers=4,
-    collate_fn=collate_fn,
-)
+def test_collate_fn(batch):
+    images, image_ids = zip(*batch)
+    return images, image_ids
+
+
+def get_data_loader(batch_size: int, split: str):
+    assert split in ["train", "val", "test"]
+    if split == "train":
+        dataset = train_dataset
+        collate_fn = train_and_val_collate_fn
+    elif split == "val":
+        dataset = val_dataset
+        collate_fn = train_and_val_collate_fn
+    elif split == "test":
+        dataset = test_dataset
+        collate_fn = test_collate_fn
+    else:
+        raise ValueError()
+
+    return torch.utils.data.DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=True if split == "train" else False,
+        num_workers=4,
+        collate_fn=collate_fn,
+    )
