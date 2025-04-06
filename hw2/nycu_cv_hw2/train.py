@@ -45,7 +45,9 @@ def main():
     optimizer = torch.optim.SGD(model.parameters())
 
     # Trainer
-    trainer = Trainer(model, optimizer, device, writer, settings.score_threshold)
+    trainer = Trainer(
+        model, optimizer, device, writer, settings.score_threshold
+    )
 
     # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
     try:

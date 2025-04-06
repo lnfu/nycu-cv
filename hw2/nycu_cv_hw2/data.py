@@ -7,6 +7,7 @@ import torchvision
 from nycu_cv_hw2.constants import DATA_DIR_PATH
 from nycu_cv_hw2.exceptions import InvalidPathError
 from PIL import Image, ImageFile
+from torchvision.models.detection import FasterRCNN_ResNet50_FPN_Weights
 
 
 class TestDataset(torch.utils.data.Dataset):
@@ -24,7 +25,9 @@ class TestDataset(torch.utils.data.Dataset):
             raise InvalidPathError()
 
         # 字典序
-        self._img_file_paths = sorted(pathlib.Path(image_dir_path).glob("*.png"))
+        self._img_file_paths = sorted(
+            pathlib.Path(image_dir_path).glob("*.png")
+        )
         self._transform = transform
 
     def __len__(self) -> int:
@@ -42,18 +45,18 @@ class TestDataset(torch.utils.data.Dataset):
 train_dataset = torchvision.datasets.CocoDetection(
     root=DATA_DIR_PATH / "train",
     annFile=DATA_DIR_PATH / "train.json",
-    transform=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
+    transform=FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
     target_transform=None,
 )
 val_dataset = torchvision.datasets.CocoDetection(
     root=DATA_DIR_PATH / "valid",
     annFile=DATA_DIR_PATH / "valid.json",
-    transform=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
+    transform=FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
     target_transform=None,
 )
 test_dataset = TestDataset(
     image_dir_path=DATA_DIR_PATH / "test",
-    transform=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
+    transform=FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
 )
 
 
@@ -64,7 +67,8 @@ def train_and_val_collate_fn(batch):
     new_labels = []
     for label in labels:  # label is list of dicts
         boxes = []
-        # bbox = (x_min, y_min, width, height) -> bbox = (x_min, y_min, x_max, y_max)
+        # bbox = (x_min, y_min, width, height) -> bbox = (x_min, y_min, x_max,
+        # y_max)
         for t in label:
             x_min, y_min, w, h = t["bbox"]
             x_max = x_min + w
@@ -77,12 +81,19 @@ def train_and_val_collate_fn(batch):
         new_label = {
             "boxes": torch.tensor(boxes, dtype=torch.float32),
             "labels": torch.tensor(
-                [t["category_id"] - 1 for t in label],  # category_id =  1-10 -> 0-9
+                # category_id =  1-10 -> 0-9
+                [t["category_id"] - 1 for t in label],
                 dtype=torch.int64,
             ),
-            "image_id": torch.tensor([label[0]["image_id"]], dtype=torch.int64),
-            "area": torch.tensor([t["area"] for t in label], dtype=torch.float32),
-            "iscrowd": torch.tensor([t["iscrowd"] for t in label], dtype=torch.int64),
+            "image_id": torch.tensor(
+                [label[0]["image_id"]], dtype=torch.int64
+            ),
+            "area": torch.tensor(
+                [t["area"] for t in label], dtype=torch.float32
+            ),
+            "iscrowd": torch.tensor(
+                [t["iscrowd"] for t in label], dtype=torch.int64
+            ),
         }
         new_labels.append(new_label)
 

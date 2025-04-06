@@ -75,7 +75,10 @@ class Trainer:
                 input.to(self._device, non_blocking=True) for input in inputs
             ]  # input = image
             targets = [
-                {k: v.to(self._device, non_blocking=True) for k, v in t.items()}
+                {
+                    k: v.to(self._device, non_blocking=True)
+                    for k, v in t.items()
+                }
                 for t in targets
             ]
 
@@ -102,8 +105,12 @@ class Trainer:
             desc=(f"Training {epoch}"),
             ncols=100,
         ):
-            inputs = [input.to(self._device) for input in inputs]  # input = image
-            targets = [{k: v.to(self._device) for k, v in t.items()} for t in targets]
+            inputs = [
+                input.to(self._device) for input in inputs
+            ]  # input = image
+            targets = [
+                {k: v.to(self._device) for k, v in t.items()} for t in targets
+            ]
 
             loss = self.val_batch_loss(inputs, targets)
             total_loss += loss
@@ -159,7 +166,9 @@ class Trainer:
                     # matched_pairs.append((target_idx, output_idx))
                     matched_target_indices.add(target_idx.item())
                     matched_output_indices.add(output_idx.item())
-                    matched_pairs.append((target_idx.item(), output_idx.item()))
+                    matched_pairs.append(
+                        (target_idx.item(), output_idx.item())
+                    )
 
                     # 避免重複 matching
                     iou_matrix[target_idx, :] = 0
@@ -175,25 +184,31 @@ class Trainer:
                 # FN
                 for idx in range(len(target_labels)):
                     if idx not in matched_target_indices:
-                        final_target_labels.append(target_labels[idx].item() + 1)
+                        final_target_labels.append(
+                            target_labels[idx].item() + 1
+                        )
                         final_output_labels.append(0)
 
                 # FP
                 for idx in range(len(output_labels)):
                     if idx not in matched_output_indices:
                         final_target_labels.append(0)
-                        final_output_labels.append(output_labels[idx].item() + 1)
+                        final_output_labels.append(
+                            output_labels[idx].item() + 1
+                        )
                 cm.update(
                     torch.tensor(final_output_labels, dtype=torch.long),
                     torch.tensor(final_target_labels, dtype=torch.long),
                 )
 
         cm = cm.compute()
-        df_cm = pd.DataFrame(cm.numpy(), index=range(10 + 1), columns=range(10 + 1))
+        df_cm = pd.DataFrame(
+            cm.numpy(), index=range(10 + 1), columns=range(10 + 1)
+        )
         fig, ax = plt.subplots(figsize=(10, 7))
         sns.heatmap(df_cm, ax=ax, annot=True, cmap="Spectral", fmt="g")
         self._writer.add_figure(
-            f"Confusion_Matrix (Validation)",
+            "Confusion_Matrix (Validation)",
             fig,
             epoch,
         )
@@ -214,7 +229,9 @@ class Trainer:
             self.min_val_loss = min(self.min_val_loss, val_loss)
 
             self._writer.add_scalars(
-                "Loss", {"Train": train_loss, "Validation": val_loss}, global_step=epoch
+                "Loss",
+                {"Train": train_loss, "Validation": val_loss},
+                global_step=epoch,
             )
 
             self._writer.add_hparams(
@@ -234,5 +251,9 @@ class Trainer:
             )
 
             logging.info(
-                f"Epoch {epoch+1}: Train Loss: {train_loss:.3f}, Val Loss: {val_loss:.3f}",
+                f"Epoch {
+                    epoch +
+                    1}: Train Loss: {
+                    train_loss:.3f}, Val Loss: {
+                    val_loss:.3f}",
             )

@@ -4,7 +4,7 @@ class CustomError(Exception):
     pass
 
 
-class InvalidPathError(Exception):
+class InvalidPathError(CustomError):
     """Raised when the provided path is neither a str nor a pathlib.Path."""
 
     def __init__(self, path_name: str, actual_type: type):

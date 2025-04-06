@@ -7,9 +7,9 @@ image_id, bbox, score, and category_id.
 """
 
 import csv
-import datetime
 import json
 import logging
+import time
 
 import click
 import torch
@@ -39,7 +39,9 @@ def main(model_name: str):
 
     # Model
     model: torch.nn.Module = torch.load(
-        MODEL_DIR_PATH / f"{model_name}.pt", weights_only=False, map_location=device
+        MODEL_DIR_PATH / f"{model_name}.pt",
+        weights_only=False,
+        map_location=device,
     )
 
     # Dataloader
@@ -70,7 +72,9 @@ def main(model_name: str):
                                 "score": float(score),
                             }
                             for box, label, score in zip(
-                                output["boxes"], output["labels"], output["scores"]
+                                output["boxes"],
+                                output["labels"],
+                                output["scores"],
                             )
                         ],
                     )
@@ -101,7 +105,10 @@ def main(model_name: str):
                             int(image_id),
                             int(
                                 "".join(
-                                    [str(pred["label"]) for pred in valid_predictions]
+                                    [
+                                        str(pred["label"])
+                                        for pred in valid_predictions
+                                    ]
                                 )
                             ),
                         ]
