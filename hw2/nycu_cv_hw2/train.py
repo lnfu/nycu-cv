@@ -49,7 +49,8 @@ def main():
         model, optimizer, device, writer, settings.score_threshold
     )
 
-    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
+    # lr_scheduler =
+    # torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
     try:
         trainer.train(
             train_loader=get_data_loader(settings.batch_size, "train"),

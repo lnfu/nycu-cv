@@ -12,14 +12,16 @@ def eprint(*args, **kwargs):
 
 def compute_iou_matrix(boxes1: torch.Tensor, boxes2: torch.Tensor):
     """
-    Compute the IoU (Intersection over Union) matrix between two sets of bounding boxes.
+    Compute the IoU (Intersection over Union) matrix between two sets of
+    bounding boxes.
 
     Args:
         boxes1 (Tensor[N, 4]): Bounding boxes in (x1, y1, x2, y2) format.
         boxes2 (Tensor[M, 4]): Bounding boxes in (x1, y1, x2, y2) format.
 
     Returns:
-        Tensor[N, M]: IoU matrix where element (i, j) is the IoU between boxes1[i] and boxes2[j].
+        Tensor[N, M]: IoU matrix where element (i, j) is the IoU between
+        boxes1[i] and boxes2[j].
     """
     x_min_inter = torch.maximum(boxes1[:, None, 0], boxes2[None, :, 0])
     y_min_inter = torch.maximum(boxes1[:, None, 1], boxes2[None, :, 1])

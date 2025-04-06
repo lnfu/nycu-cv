@@ -9,7 +9,6 @@ image_id, bbox, score, and category_id.
 import csv
 import json
 import logging
-import time
 
 import click
 import torch
