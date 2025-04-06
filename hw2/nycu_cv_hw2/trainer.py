@@ -5,7 +5,8 @@ import pandas as pd
 import seaborn as sns
 import torch
 import tqdm
-from nycu_cv_hw2.utils import compute_iou_matrix, eprint
+from nycu_cv_hw2.constants import IOU_THRESHOLD, NUM_CLASSES
+from nycu_cv_hw2.utils import compute_iou_matrix
 from torch.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from torchmetrics import ConfusionMatrix
@@ -25,7 +26,7 @@ class Trainer:
         writer: SummaryWriter,
         score_threshold: float,
     ):
-        self._model = model.to(device)
+        self._model = model
         self._optimizer = optimizer
         self._device = device
         self._writer = writer
@@ -70,8 +71,13 @@ class Trainer:
             desc=(f"Training {epoch}"),
             ncols=100,
         ):
-            inputs = [input.to(self._device) for input in inputs]  # input = image
-            targets = [{k: v.to(self._device) for k, v in t.items()} for t in targets]
+            inputs = [
+                input.to(self._device, non_blocking=True) for input in inputs
+            ]  # input = image
+            targets = [
+                {k: v.to(self._device, non_blocking=True) for k, v in t.items()}
+                for t in targets
+            ]
 
             loss = self.train_batch(inputs, targets)
             total_loss += loss
@@ -84,10 +90,12 @@ class Trainer:
         epoch: int,
         data_loader: torch.utils.data.DataLoader,
     ) -> float:
+
         total_loss = 0.0
         cm = ConfusionMatrix(
-            task="multiclass", num_classes=10 + 1  # TODO 10 from dataloader?
-        ).to(self._device)
+            task="multiclass",
+            num_classes=NUM_CLASSES + 1,
+        )
 
         for inputs, targets in tqdm.tqdm(
             data_loader,
@@ -101,6 +109,8 @@ class Trainer:
             total_loss += loss
 
             outputs = self.val_batch_outputs(inputs)
+            outputs = [{k: v.cpu() for k, v in o.items()} for o in outputs]
+            targets = [{k: v.cpu() for k, v in t.items()} for t in targets]
 
             # 計算/更新 confusion matrix
             for target, output in zip(targets, outputs):
@@ -116,17 +126,13 @@ class Trainer:
 
                 if len(target_boxes) == 0:
                     # 全部都是 FP, 假設 background class = 0
-                    fake_target_labels = torch.full_like(output_labels, 0).to(
-                        self._device
-                    )
+                    fake_target_labels = torch.full_like(output_labels, 0)
                     cm.update(output_labels + 1, fake_target_labels)
                     continue
 
                 if len(output_boxes) == 0:
                     # 所有都是 FN, 假設 background class = 0
-                    fake_output_labels = torch.full_like(target_labels, 0).to(
-                        self._device
-                    )
+                    fake_output_labels = torch.full_like(target_labels, 0)
                     cm.update(fake_output_labels, target_labels + 1)
                     continue
 
@@ -139,7 +145,7 @@ class Trainer:
                 while True:
                     # 找到最大的 IoU
                     max_iou = iou_matrix.max()
-                    if max_iou < 0.5:  # 全部都 < 0.5 就結束迴圈 TODO 0.5 or other #???
+                    if max_iou < IOU_THRESHOLD:  # 全部都 < 0.5 就結束迴圈
                         break
 
                     # 找到最大的 IoU 的 index
@@ -147,9 +153,13 @@ class Trainer:
                         torch.argmax(iou_matrix), iou_matrix.shape
                     )
 
-                    matched_target_indices.add(target_idx)
-                    matched_output_indices.add(output_idx)
-                    matched_pairs.append((target_idx, output_idx))
+                    # TODO 需要嗎???
+                    # matched_target_indices.add(target_idx)
+                    # matched_output_indices.add(output_idx)
+                    # matched_pairs.append((target_idx, output_idx))
+                    matched_target_indices.add(target_idx.item())
+                    matched_output_indices.add(output_idx.item())
+                    matched_pairs.append((target_idx.item(), output_idx.item()))
 
                     # 避免重複 matching
                     iou_matrix[target_idx, :] = 0
@@ -159,8 +169,8 @@ class Trainer:
                 final_output_labels = []
 
                 for t_idx, p_idx in matched_pairs:
-                    final_target_labels.append(target_labels[t_idx].item())
-                    final_output_labels.append(output_labels[p_idx].item())
+                    final_target_labels.append(target_labels[t_idx].item() + 1)
+                    final_output_labels.append(output_labels[p_idx].item() + 1)
 
                 # FN
                 for idx in range(len(target_labels)):
@@ -173,16 +183,13 @@ class Trainer:
                     if idx not in matched_output_indices:
                         final_target_labels.append(0)
                         final_output_labels.append(output_labels[idx].item() + 1)
-
                 cm.update(
-                    torch.tensor(final_target_labels).to(self._device),
-                    torch.tensor(final_output_labels).to(self._device),
+                    torch.tensor(final_output_labels, dtype=torch.long),
+                    torch.tensor(final_target_labels, dtype=torch.long),
                 )
 
         cm = cm.compute()
-        df_cm = pd.DataFrame(
-            cm.cpu().numpy(), index=range(10 + 1), columns=range(10 + 1)
-        )
+        df_cm = pd.DataFrame(cm.numpy(), index=range(10 + 1), columns=range(10 + 1))
         fig, ax = plt.subplots(figsize=(10, 7))
         sns.heatmap(df_cm, ax=ax, annot=True, cmap="Spectral", fmt="g")
         self._writer.add_figure(
@@ -207,7 +214,7 @@ class Trainer:
             self.min_val_loss = min(self.min_val_loss, val_loss)
 
             self._writer.add_scalars(
-                "Loss", {"Train": train_loss, "Validation": val_loss}, epoch
+                "Loss", {"Train": train_loss, "Validation": val_loss}, global_step=epoch
             )
 
             self._writer.add_hparams(
@@ -222,6 +229,8 @@ class Trainer:
                     "train_loss": train_loss,
                     "val_loss": val_loss,
                 },
+                run_name=self._writer.get_logdir(),
+                global_step=epoch,
             )
 
             logging.info(

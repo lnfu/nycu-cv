@@ -2,9 +2,9 @@ import datetime
 import logging
 
 import torch
-import torchvision
+import torchvision.models.detection as detection
 from nycu_cv_hw2.config import settings
-from nycu_cv_hw2.constants import LOG_DIR_PATH, MODEL_DIR_PATH
+from nycu_cv_hw2.constants import LOG_DIR_PATH, MODEL_DIR_PATH, NUM_CLASSES
 from nycu_cv_hw2.data import get_data_loader
 from nycu_cv_hw2.trainer import Trainer
 from nycu_cv_hw2.utils import eprint
@@ -29,14 +29,15 @@ def main():
     writer.add_text("Device", device.type)
 
     # Model
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-        weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+    model = detection.fasterrcnn_resnet50_fpn(
+        weights=detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+    )
+    model.backbone = detection.backbone_utils.resnet_fpn_backbone(
+        backbone_name="resnet101", weights="DEFAULT"
     )
     in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = (
-        torchvision.models.detection.faster_rcnn.FastRCNNPredictor(
-            in_features, num_classes=10
-        )
+    model.roi_heads.box_predictor = detection.faster_rcnn.FastRCNNPredictor(
+        in_features, num_classes=NUM_CLASSES
     )
     model.to(device)
 

@@ -5,6 +5,7 @@ import typing
 import torch
 import torchvision
 from nycu_cv_hw2.constants import DATA_DIR_PATH
+from nycu_cv_hw2.exceptions import InvalidPathError
 from PIL import Image, ImageFile
 
 
@@ -20,7 +21,7 @@ class TestDataset(torch.utils.data.Dataset):
             image_dir_path = pathlib.Path(image_dir_path)
 
         if not isinstance(image_dir_path, pathlib.Path):
-            raise ValueError()  # TODO
+            raise InvalidPathError()
 
         # 字典序
         self._img_file_paths = sorted(pathlib.Path(image_dir_path).glob("*.png"))
@@ -85,7 +86,7 @@ def train_and_val_collate_fn(batch):
         }
         new_labels.append(new_label)
 
-    return list(inputs), new_labels
+    return inputs, new_labels
 
 
 def test_collate_fn(batch):
@@ -113,4 +114,5 @@ def get_data_loader(batch_size: int, split: str):
         shuffle=True if split == "train" else False,
         num_workers=4,
         collate_fn=collate_fn,
+        pin_memory=True,
     )

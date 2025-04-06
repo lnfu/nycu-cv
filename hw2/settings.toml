@@ -5,5 +5,5 @@ score_threshold = 0.5
 
 [dev]
 num_epochs = 20
-batch_size = 16
+batch_size = 8
 score_threshold = 0.5

@@ -13,10 +13,9 @@ import logging
 
 import click
 import torch
-import torchvision
 import tqdm
 from nycu_cv_hw2.config import settings
-from nycu_cv_hw2.constants import LOG_DIR_PATH, MODEL_DIR_PATH
+from nycu_cv_hw2.constants import MODEL_DIR_PATH
 from nycu_cv_hw2.data import get_data_loader
 
 logging.basicConfig(
@@ -28,11 +27,12 @@ logging.basicConfig(
 
 
 @click.command()
-@click.option("--model-name", prompt="Model name", help="")  # TODO help
+@click.option(
+    "--model-name",
+    prompt="Model name",
+    help="Name of the model you want to use, e.g., '2025-04-03_13-02-32'.",
+)
 def main(model_name: str):
-    # Tensorboard
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
     # Device
     device = torch.torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"device: {device}")
@@ -54,7 +54,7 @@ def main(model_name: str):
         data_loader,
         ncols=100,
     ):
-        inputs = [input.to(device) for input in inputs]
+        inputs = [input.to(device, non_blocking=True) for input in inputs]
         with torch.no_grad():
             outputs = model(inputs)
             for image_id, output in zip(image_ids, outputs):
