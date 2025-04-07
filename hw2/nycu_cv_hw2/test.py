@@ -67,7 +67,7 @@ def main(model_name: str):
                         [
                             {
                                 "box": box.cpu().numpy(),
-                                "label": int(label),  # 0 - 9
+                                "label": int(label),
                                 "score": float(score),
                             }
                             for box, label, score in zip(
@@ -92,7 +92,7 @@ def main(model_name: str):
                                 float(pred["box"][3] - pred["box"][1]),
                             ],
                             "score": pred["score"],
-                            "category_id": pred["label"] + 1,  # 1 - 10
+                            "category_id": pred["label"],
                         }
                         for pred in valid_predictions
                     ]
@@ -105,7 +105,8 @@ def main(model_name: str):
                             int(
                                 "".join(
                                     [
-                                        str(pred["label"])
+                                        # category_id -> digit
+                                        str(pred["label"] - 1)
                                         for pred in valid_predictions
                                     ]
                                 )

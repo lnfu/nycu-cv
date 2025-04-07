@@ -69,30 +69,33 @@ def train_and_val_collate_fn(batch):
         boxes = []
         # bbox = (x_min, y_min, width, height) -> bbox = (x_min, y_min, x_max,
         # y_max)
-        for t in label:
-            x_min, y_min, w, h = t["bbox"]
+        for label_entry in label:
+            x_min, y_min, w, h = label_entry["bbox"]
             x_max = x_min + w
             y_max = y_min + h
             if w <= 0 or h <= 0:
-                logging.warning(f"Found invalid box {t['bbox']} -> Skipping.")
+                logging.warning(
+                    f"Found invalid box {label_entry['bbox']} -> Skipping."
+                )
                 continue
             boxes.append([x_min, y_min, x_max, y_max])
 
         new_label = {
             "boxes": torch.tensor(boxes, dtype=torch.float32),
             "labels": torch.tensor(
-                # category_id =  1-10 -> 0-9
-                [t["category_id"] - 1 for t in label],
+                [label_entry["category_id"] for label_entry in label],
                 dtype=torch.int64,
             ),
             "image_id": torch.tensor(
                 [label[0]["image_id"]], dtype=torch.int64
             ),
             "area": torch.tensor(
-                [t["area"] for t in label], dtype=torch.float32
+                [label_entry["area"] for label_entry in label],
+                dtype=torch.float32,
             ),
             "iscrowd": torch.tensor(
-                [t["iscrowd"] for t in label], dtype=torch.int64
+                [label_entry["iscrowd"] for label_entry in label],
+                dtype=torch.int64,
             ),
         }
         new_labels.append(new_label)

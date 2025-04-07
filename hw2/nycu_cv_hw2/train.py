@@ -32,12 +32,13 @@ def main():
     model = detection.fasterrcnn_resnet50_fpn(
         weights=detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT
     )
-    model.backbone = detection.backbone_utils.resnet_fpn_backbone(
-        backbone_name="resnet101", weights="DEFAULT"
-    )
+    # resnet101 沒有比較好...
+    # model.backbone = detection.backbone_utils.resnet_fpn_backbone(
+    #     backbone_name="resnet101", weights="DEFAULT"
+    # )
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = detection.faster_rcnn.FastRCNNPredictor(
-        in_features, num_classes=NUM_CLASSES
+        in_features, num_classes=NUM_CLASSES + 1
     )
     model.to(device)
 

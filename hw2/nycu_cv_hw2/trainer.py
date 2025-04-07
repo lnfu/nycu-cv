@@ -121,26 +121,28 @@ class Trainer:
 
             # 計算/更新 confusion matrix
             for target, output in zip(targets, outputs):
-                target_boxes = target["boxes"]
-                target_labels = target["labels"]
+                target_boxes: torch.Tensor = target["boxes"]
+                target_labels: torch.Tensor = target["labels"]
 
-                score_filter = output["scores"] > self._score_threshold
-                output_boxes = output["boxes"][score_filter]
-                output_labels = output["labels"][score_filter]
+                score_filter: torch.BoolTensor = (
+                    output["scores"] > self._score_threshold
+                )
+                output_boxes: torch.Tensor = output["boxes"][score_filter]
+                output_labels: torch.Tensor = output["labels"][score_filter]
 
                 if len(target_boxes) == 0 and len(output_boxes) == 0:
                     continue
 
                 if len(target_boxes) == 0:
-                    # 全部都是 FP, 假設 background class = 0
+                    # 全部都是 FP, background class = 0
                     fake_target_labels = torch.full_like(output_labels, 0)
-                    cm.update(output_labels + 1, fake_target_labels)
+                    cm.update(output_labels, fake_target_labels)
                     continue
 
                 if len(output_boxes) == 0:
-                    # 所有都是 FN, 假設 background class = 0
+                    # 所有都是 FN, background class = 0
                     fake_output_labels = torch.full_like(target_labels, 0)
-                    cm.update(fake_output_labels, target_labels + 1)
+                    cm.update(fake_output_labels, target_labels)
                     continue
 
                 iou_matrix = compute_iou_matrix(target_boxes, output_boxes)
@@ -160,10 +162,6 @@ class Trainer:
                         torch.argmax(iou_matrix), iou_matrix.shape
                     )
 
-                    # TODO 需要嗎???
-                    # matched_target_indices.add(target_idx)
-                    # matched_output_indices.add(output_idx)
-                    # matched_pairs.append((target_idx, output_idx))
                     matched_target_indices.add(target_idx.item())
                     matched_output_indices.add(output_idx.item())
                     matched_pairs.append(
@@ -178,24 +176,20 @@ class Trainer:
                 final_output_labels = []
 
                 for t_idx, p_idx in matched_pairs:
-                    final_target_labels.append(target_labels[t_idx].item() + 1)
-                    final_output_labels.append(output_labels[p_idx].item() + 1)
+                    final_target_labels.append(target_labels[t_idx].item())
+                    final_output_labels.append(output_labels[p_idx].item())
 
                 # FN
                 for idx in range(len(target_labels)):
                     if idx not in matched_target_indices:
-                        final_target_labels.append(
-                            target_labels[idx].item() + 1
-                        )
+                        final_target_labels.append(target_labels[idx].item())
                         final_output_labels.append(0)
 
                 # FP
                 for idx in range(len(output_labels)):
                     if idx not in matched_output_indices:
                         final_target_labels.append(0)
-                        final_output_labels.append(
-                            output_labels[idx].item() + 1
-                        )
+                        final_output_labels.append(output_labels[idx].item())
                 cm.update(
                     torch.tensor(final_output_labels, dtype=torch.long),
                     torch.tensor(final_target_labels, dtype=torch.long),
@@ -203,9 +197,13 @@ class Trainer:
 
         cm = cm.compute()
         df_cm = pd.DataFrame(
-            cm.numpy(), index=range(10 + 1), columns=range(10 + 1)
+            cm.numpy(),
+            index=range(NUM_CLASSES + 1),
+            columns=range(NUM_CLASSES + 1),
         )
         fig, ax = plt.subplots(figsize=(10, 7))
+        ax.set_xlabel("Predictions")
+        ax.set_ylabel("Ground Truth")
         sns.heatmap(df_cm, ax=ax, annot=True, cmap="Spectral", fmt="g")
         self._writer.add_figure(
             "Confusion_Matrix (Validation)",
