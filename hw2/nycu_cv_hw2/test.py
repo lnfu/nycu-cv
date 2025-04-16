@@ -84,6 +84,7 @@ def main(model_name: str):
                     )
                 )
 
+                # 按照 x 排序
                 valid_predictions.sort(key=lambda x: x["box"][0])
 
                 task1_predictions.extend(

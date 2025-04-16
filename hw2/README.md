@@ -6,7 +6,7 @@
 
 ## Description
 
-TODO
+This repo contains the implementation for digit recognition using the Faster R-CNN framework.
 
 ## Setup and Usage
 

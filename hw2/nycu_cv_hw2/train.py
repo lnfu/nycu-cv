@@ -35,10 +35,10 @@ def main():
     model = detection.fasterrcnn_mobilenet_v3_large_fpn(
         weights=detection.FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT,
     )
-    model.rpn.pre_nms_top_n_train = 400
-    model.rpn.post_nms_top_n_train = 400
-    model.rpn.pre_nms_top_n_test = 200
-    model.rpn.post_nms_top_n_test = 200
+    model.rpn.pre_nms_top_n_train = 600
+    model.rpn.post_nms_top_n_train = 600
+    model.rpn.pre_nms_top_n_test = 300
+    model.rpn.post_nms_top_n_test = 300
 
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = CustomFastRCNNPredictor(
