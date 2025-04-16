@@ -45,4 +45,6 @@ python -m nycu_cv_hw2.test
 
 ## Results
 
-<!-- TODO -->
+![Leaderboard](./docs/leaderboard.png)
+![Loss](./docs/loss.png)
+![Confusion Matrix](./docs/confusion_matrix.png)

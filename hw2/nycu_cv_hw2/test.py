@@ -18,9 +18,14 @@ import click
 import torch
 import tqdm
 from nycu_cv_hw2.config import settings
-from nycu_cv_hw2.constants import MODEL_DIR_PATH, OUTPUT_DIR_PATH
+from nycu_cv_hw2.constants import (
+    IOU_THRESHOLD,
+    MODEL_DIR_PATH,
+    OUTPUT_DIR_PATH,
+)
 from nycu_cv_hw2.data import get_data_loader
 from nycu_cv_hw2.predictor import CustomFastRCNNPredictor  # noqa: F401
+from torchvision.ops import nms
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,8 +89,22 @@ def main(model_name: str):
                     )
                 )
 
-                # 按照 x 排序
-                valid_predictions.sort(key=lambda x: x["box"][0])
+                if valid_predictions:
+                    boxes_tensor = torch.tensor(
+                        [pred["box"] for pred in valid_predictions]
+                    )
+                    scores_tensor = torch.tensor(
+                        [pred["score"] for pred in valid_predictions]
+                    )
+
+                    keep_indices = nms(
+                        boxes_tensor, scores_tensor, IOU_THRESHOLD
+                    )
+                    valid_predictions = [
+                        valid_predictions[i] for i in keep_indices
+                    ]
+                    # 按照 x 排序
+                    valid_predictions.sort(key=lambda x: x["box"][0])
 
                 task1_predictions.extend(
                     [
