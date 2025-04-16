@@ -1,12 +1,16 @@
 import logging
+from typing import Any, Dict, Optional
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
 import tqdm
-from nycu_cv_hw2.constants import IOU_THRESHOLD, NUM_CLASSES
-from nycu_cv_hw2.utils import compute_iou_matrix
+from nycu_cv_hw2.constants import DATA_DIR_PATH, IOU_THRESHOLD, NUM_CLASSES
+from nycu_cv_hw2.utils import compute_iou_matrix, eprint
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
 from torch.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from torchmetrics import ConfusionMatrix
@@ -38,7 +42,14 @@ class Trainer:
         self._optimizer.zero_grad()
         with autocast(device_type=self._device.type):
             loss_dict = self._model(inputs, targets)
-            loss: torch.Tensor = sum(loss for loss in loss_dict.values())
+            # loss: torch.Tensor = sum(loss for loss in loss_dict.values())
+            loss = (
+                1.0 * loss_dict["loss_classifier"]
+                + 1.0 * loss_dict["loss_box_reg"]
+                + 0.5 * loss_dict["loss_objectness"]
+                + 0.5 * loss_dict["loss_rpn_box_reg"]
+            )
+
         self._scaler.scale(loss).backward()
         self._scaler.step(self._optimizer)
         self._scaler.update()
@@ -46,15 +57,13 @@ class Trainer:
 
     def val_batch_loss(self, inputs: list, targets: list) -> float:
         self._model.train()
-
         with autocast(device_type=self._device.type):
             loss_dict = self._model(inputs, targets)
-            loss: torch.Tensor = sum(loss for loss in loss_dict.values())
+            loss = self._compute_loss(loss_dict)
         return loss.item()
 
     def val_batch_outputs(self, inputs: list) -> torch.Tensor:
         self._model.eval()
-
         with autocast(device_type=self._device.type):
             outputs = self._model(inputs)
         return outputs
@@ -71,16 +80,13 @@ class Trainer:
             desc=(f"Training {epoch}"),
             ncols=100,
         ):
-            inputs = [
-                input.to(self._device, non_blocking=True) for input in inputs
-            ]  # input = image
-            targets = [
-                {
-                    k: v.to(self._device, non_blocking=True)
-                    for k, v in t.items()
-                }
-                for t in targets
-            ]
+
+            inputs = self._move_to_device(
+                inputs, self._device, non_blocking=True
+            )
+            targets = self._move_to_device(
+                targets, self._device, non_blocking=True
+            )
 
             loss = self.train_batch(inputs, targets)
             total_loss += loss
@@ -100,24 +106,46 @@ class Trainer:
             num_classes=NUM_CLASSES + 1,
         )
 
+        total_targets_coco = COCO(DATA_DIR_PATH / "valid.json")  # TODO
+        total_outputs = []
+        # total_outputs = total_targets.loadRes(total_outputs)
+
         for inputs, targets in tqdm.tqdm(
             data_loader,
             desc=(f"Training {epoch}"),
             ncols=100,
         ):
-            inputs = [
-                input.to(self._device) for input in inputs
-            ]  # input = image
-            targets = [
-                {k: v.to(self._device) for k, v in t.items()} for t in targets
-            ]
 
-            loss = self.val_batch_loss(inputs, targets)
+            inputs_gpu = self._move_to_device(
+                inputs, self._device, non_blocking=True
+            )
+
+            targets_gpu = self._move_to_device(
+                targets, self._device, non_blocking=True
+            )
+
+            loss = self.val_batch_loss(inputs_gpu, targets_gpu)
             total_loss += loss
 
-            outputs = self.val_batch_outputs(inputs)
+            outputs = self.val_batch_outputs(inputs_gpu)
             outputs = [{k: v.cpu() for k, v in o.items()} for o in outputs]
-            targets = [{k: v.cpu() for k, v in t.items()} for t in targets]
+
+            for target, output in zip(targets, outputs):
+                for box, label, score in zip(
+                    output["boxes"], output["labels"], output["scores"]
+                ):
+
+                    x1, y1, x2, y2 = box.tolist()
+                    bbox = [x1, y1, x2 - x1, y2 - y1]
+
+                    total_outputs.append(
+                        {
+                            "image_id": target["image_id"].item(),
+                            "category_id": int(label.item()),
+                            "bbox": bbox,
+                            "score": float(score.item()),
+                        }
+                    )
 
             # 計算/更新 confusion matrix
             for target, output in zip(targets, outputs):
@@ -195,9 +223,13 @@ class Trainer:
                     torch.tensor(final_target_labels, dtype=torch.long),
                 )
 
-        cm = cm.compute()
+        cm = cm.compute().numpy()
+        logging.info(
+            f"Epoch {epoch + 1}: Accuracy: {np.trace(cm) / np.sum(cm)}"
+        )
+        eprint(np.trace(cm), np.sum(cm))
         df_cm = pd.DataFrame(
-            cm.numpy(),
+            cm,
             index=range(NUM_CLASSES + 1),
             columns=range(NUM_CLASSES + 1),
         )
@@ -211,6 +243,16 @@ class Trainer:
             epoch,
         )
 
+        total_outputs_coco = total_targets_coco.loadRes(total_outputs)
+        coco_eval = COCOeval(
+            total_targets_coco, total_outputs_coco, iouType="bbox"
+        )
+        coco_eval.evaluate()
+        coco_eval.accumulate()
+        coco_eval.summarize()
+
+        logging.info(coco_eval.stats[0])
+
         return total_loss / len(data_loader)
 
     def train(
@@ -218,6 +260,7 @@ class Trainer:
         train_loader: torch.utils.data.DataLoader,
         val_loader: torch.utils.data.DataLoader,
         num_epochs: int,
+        extra_hparams: Optional[Dict[str, Any]] = None,
     ):
         for epoch in range(num_epochs):
             train_loss = self.train_epoch(epoch, train_loader)
@@ -231,15 +274,23 @@ class Trainer:
                 {"Train": train_loss, "Validation": val_loss},
                 global_step=epoch,
             )
-
+            base_hparams = {
+                "lr": self._optimizer.param_groups[0]["lr"],
+                "weight_decay": self._optimizer.param_groups[0].get(
+                    "weight_decay", 0.0
+                ),
+                "momentum": self._optimizer.param_groups[0].get(
+                    "momentum", 0.0
+                ),
+                "num_epochs": num_epochs,
+                "train_batch_size": train_loader.batch_size,
+                "val_batch_size": val_loader.batch_size,
+                "score_threshold": getattr(self, "_score_threshold", 0.5),
+            }
+            if extra_hparams:
+                base_hparams.update(extra_hparams)
             self._writer.add_hparams(
-                hparam_dict={
-                    "lr": self._optimizer.param_groups[0]["lr"],
-                    "num_epochs": num_epochs,
-                    "train_batch_size": train_loader.batch_size,
-                    "val_batch_size": val_loader.batch_size,
-                    "score_threshold": self._score_threshold,
-                },
+                hparam_dict=base_hparams,
                 metric_dict={
                     "train_loss": train_loss,
                     "val_loss": val_loss,
@@ -255,3 +306,29 @@ class Trainer:
                     train_loss:.3f}, Val Loss: {
                     val_loss:.3f}",
             )
+
+    def _move_to_device(self, data, device, non_blocking: bool = True):
+        if isinstance(data, list):
+            return [
+                self._move_to_device(item, device, non_blocking)
+                for item in data
+            ]
+        elif isinstance(data, dict):
+            return {
+                k: self._move_to_device(v, device, non_blocking)
+                for k, v in data.items()
+            }
+        elif hasattr(data, "to"):
+            return data.to(device, non_blocking=non_blocking)
+        else:
+            return data
+
+    def _compute_loss(
+        self, loss_dict: Dict[str, torch.Tensor]
+    ) -> torch.Tensor:
+        return (
+            1.0 * loss_dict["loss_classifier"]
+            + 1.0 * loss_dict["loss_box_reg"]
+            + 0.5 * loss_dict["loss_objectness"]
+            + 0.5 * loss_dict["loss_rpn_box_reg"]
+        )

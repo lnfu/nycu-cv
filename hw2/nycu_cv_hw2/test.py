@@ -1,9 +1,13 @@
-"""Task1.
+"""Test
 
+Task1.
 Detect each digit in the image. The submission file should be a JSON file
 in COCO format named pred.json. Specifically, it should be a list of labels,
 where each label is represented as a dictionary with the keys:
 image_id, bbox, score, and category_id.
+
+Task2.
+The number of detected digits in the image, e.g., the number “49”.
 """
 
 import csv
@@ -14,14 +18,15 @@ import click
 import torch
 import tqdm
 from nycu_cv_hw2.config import settings
-from nycu_cv_hw2.constants import MODEL_DIR_PATH
+from nycu_cv_hw2.constants import MODEL_DIR_PATH, OUTPUT_DIR_PATH
 from nycu_cv_hw2.data import get_data_loader
+from nycu_cv_hw2.predictor import CustomFastRCNNPredictor  # noqa: F401
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    filename="basic.log",  # TODO 改成加到 tensorboard?
+    filename="basic.log",
 )
 
 
@@ -116,10 +121,13 @@ def main(model_name: str):
                 else:
                     task2_predictions.append([int(image_id), -1])
 
-    with open("pred.json", "w") as f:
+    save_dir_path = OUTPUT_DIR_PATH / model_name
+    save_dir_path.mkdir(parents=True, exist_ok=True)
+
+    with open(save_dir_path / "pred.json", "w") as f:
         json.dump(task1_predictions, f, indent=4)
 
-    with open("pred.csv", "w", newline="") as csvfile:
+    with open(save_dir_path / "pred.csv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["image_id", "pred_label"])
         writer.writerows(task2_predictions)

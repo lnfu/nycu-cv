@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     git \
     make \
     ffmpeg \
+    locales \
+    speech-dispatcher \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set Python3.12 as the default python3

@@ -41,22 +41,47 @@ class TestDataset(torch.utils.data.Dataset):
         return img, img_file_path.stem
 
 
+default_transform = FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms()
+
+# transform = torchvision.transforms.Compose(
+#     [
+#         torchvision.transforms.ColorJitter(
+#             brightness=0.4, contrast=0.4, saturation=0.4, hue=0.4
+#         ),
+#         torchvision.transforms.ToTensor(),
+#         torchvision.transforms.Normalize(
+#             mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+#         ),
+#     ]
+# )
+
+transform = torchvision.transforms.Compose(
+    [
+        torchvision.transforms.ColorJitter(
+            brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2
+        ),
+        torchvision.transforms.RandomGrayscale(p=0.1),
+        torchvision.transforms.RandomInvert(p=0.1),
+        torchvision.transforms.ToTensor(),
+    ]
+)
+
 # Dataset
 train_dataset = torchvision.datasets.CocoDetection(
     root=DATA_DIR_PATH / "train",
     annFile=DATA_DIR_PATH / "train.json",
-    transform=FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
-    target_transform=None,
+    transform=transform,  # TODO
+    target_transform=None,  # TODO
 )
 val_dataset = torchvision.datasets.CocoDetection(
     root=DATA_DIR_PATH / "valid",
     annFile=DATA_DIR_PATH / "valid.json",
-    transform=FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
-    target_transform=None,
+    transform=transform,  # TODO
+    target_transform=None,  # TODO
 )
 test_dataset = TestDataset(
     image_dir_path=DATA_DIR_PATH / "test",
-    transform=FasterRCNN_ResNet50_FPN_Weights.DEFAULT.transforms(),  # TODO
+    transform=default_transform,  # TODO
 )
 
 
