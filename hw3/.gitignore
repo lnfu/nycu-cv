@@ -1,0 +1,9 @@
+
+# Ignore dynaconf secret files
+.secrets.*
+
+data/*
+logs/*
+models/*
+outputs/*
+!data/README.md

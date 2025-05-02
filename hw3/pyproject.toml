@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nycu-cv-hw3"
+version = "0.0.1a0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "" }
+
+authors = [
+  { name="Enfu", email="enfu.liao.cs10@nycu.edu.tw" }
+]
+
+dependencies = [
+  "torch==2.6.0"
+]
+
+[project.urls]
+Homepage = ""
+Repository = ""
