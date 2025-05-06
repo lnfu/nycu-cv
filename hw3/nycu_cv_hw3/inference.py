@@ -3,7 +3,6 @@ import logging
 import zipfile
 
 import click
-import numpy as np
 import torch
 import tqdm
 from nycu_cv_hw3.constants import (
@@ -13,7 +12,7 @@ from nycu_cv_hw3.constants import (
 )
 from nycu_cv_hw3.data import inference_loader
 from nycu_cv_hw3.models import Model
-from pycocotools import mask as mask_utils
+from nycu_cv_hw3.utils import encode_mask
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,7 +25,8 @@ logging.info("==========================================")
 
 @click.command()
 @click.option(
-    "--ckpt-name" "-c",
+    "--ckpt-name",
+    "-c",
     prompt="Checkpoint name",
     help="Name of the checkpoint you want to use, e.g., '2025-04-03_13-02-32'",
 )
@@ -64,9 +64,8 @@ def main(ckpt_name: str):
                 w_box, h_box = x2 - x1, y2 - y1
 
                 mask = mask.squeeze() > MASK_THRESHOLD
-                arr = np.asfortranarray(mask.astype(np.uint8))
-                rle = mask_utils.encode(arr)
-                rle["counts"] = rle["counts"].decode("utf-8")
+
+                rle = encode_mask(mask)
 
                 results.append(
                     {

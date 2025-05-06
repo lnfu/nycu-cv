@@ -10,6 +10,8 @@ from nycu_cv_hw3.models import Model
 from nycu_cv_hw3.trainer import Trainer
 from nycu_cv_hw3.utils import eprint
 
+# from torch.optim.swa_utils import SWALR, AveragedModel
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
@@ -35,9 +37,21 @@ def main(description: str):
     logging.info(f"{device=}")
 
     model = Model().to(device)
+    # swa_model = AveragedModel(model).to(device)
 
     # Optimizer
-    optimizer = optim.AdamW([p for p in model.parameters() if p.requires_grad])
+    # optimizer = optim.AdamW(
+    #     [p for p in model.parameters() if p.requires_grad],
+    #     lr=settings.learning_rate,
+    # )
+    optimizer = optim.SGD(
+        [p for p in model.parameters() if p.requires_grad],
+        lr=settings.learning_rate,
+        weight_decay=settings.weight_decay,
+        momentum=settings.momentum,
+    )
+    # swa_scheduler = SWALR(optimizer, swa_lr=0.0005)  # TODO setting
+
     # optimizer = optim.SGD(
     #     model.parameters(),
     #     lr=settings.learning_rate,

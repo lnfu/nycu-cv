@@ -1,11 +1,10 @@
 import logging
 
-import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
 from nycu_cv_hw3.constants import LOG_DIR_PATH, MASK_THRESHOLD, MODEL_DIR_PATH
-from pycocotools import mask as mask_utils
+from nycu_cv_hw3.utils import encode_mask
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 from torch.utils.tensorboard import SummaryWriter
@@ -35,8 +34,13 @@ class Trainer:
         self.train_id = train_id
         self.writer = SummaryWriter(LOG_DIR_PATH / train_id)
         self.writer.add_text("description", description)
+        logging.info(f"Description: {description}")
+
+        self.scaler = torch.amp.GradScaler()
 
     def train(self, num_epochs: int):
+        min_val_loss = float("inf")
+
         for epoch in range(1, num_epochs + 1):
             train_loss = self.train_one_epoch(epoch)
             val_loss = self.val_loss(epoch)
@@ -72,8 +76,18 @@ class Trainer:
                 global_step=epoch,
             )
 
-            if epoch % 1 == 0:
+            if val_loss < min_val_loss:
+                min_val_loss = val_loss
                 self.save_checkpoint(epoch)
+
+    def loss_fn(self, loss_dict):
+        # sum(loss for loss in loss_dict.values())
+        return (
+            0.15 * loss_dict["loss_classifier"]
+            + 0.15 * loss_dict["loss_box_reg"]
+            + 0.55 * loss_dict["loss_mask"]
+            + 0.15 * loss_dict["loss_objectness"]
+        )
 
     @torch.no_grad()
     def val_loss(self, epoch: int) -> float:
@@ -91,16 +105,20 @@ class Trainer:
                 for target in targets
             ]
 
-            loss_dict = self.model(images, targets)
-            losses = sum(loss for loss in loss_dict.values())  # TODO
-            total_loss += losses.item()
+            with torch.amp.autocast(
+                device_type=self.device.type, cache_enabled=True
+            ):
+                loss_dict = self.model(images, targets)
+                loss = self.loss_fn(loss_dict)
 
             batch_size = len(images)
-            total_loss += losses.item() * batch_size
+            total_loss += loss.item() * batch_size
             total_count += batch_size
 
+            torch.cuda.empty_cache()
+
         avg_loss = total_loss / total_count
-        logging.info(f"val {avg_loss=}")
+        logging.info(f"[Epoch {epoch}] Validation Loss: {avg_loss:.4f}")
         return avg_loss
 
     @torch.enable_grad()
@@ -119,19 +137,25 @@ class Trainer:
                 for target in targets
             ]
 
-            loss_dict = self.model(images, targets)
-            losses = sum(loss for loss in loss_dict.values())  # TODO
+            with torch.amp.autocast(
+                device_type=self.device.type, cache_enabled=True
+            ):
+                loss_dict = self.model(images, targets)
+                loss = self.loss_fn(loss_dict)
 
             batch_size = len(images)
-            total_loss += losses.item() * batch_size
+            total_loss += loss.item() * batch_size
             total_count += batch_size
 
             self.optimizer.zero_grad()
-            losses.backward()
-            self.optimizer.step()
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+
+            torch.cuda.empty_cache()
 
         avg_loss = total_loss / total_count
-        logging.info(f"train {avg_loss=}")
+        logging.info(f"[Epoch {epoch}] Training Loss: {avg_loss:.4f}")
         return avg_loss
 
     @torch.no_grad()
@@ -151,12 +175,17 @@ class Trainer:
             #     for target in targets
             # ]
 
-            outputs = self.model(images)
+            with torch.amp.autocast(
+                device_type=self.device.type, cache_enabled=True
+            ):
+                outputs = self.model(images)
 
             for image, target, output in zip(images, targets, outputs):
                 total_images.append(image.cpu())
                 total_targets.append({k: v.cpu() for k, v in target.items()})
                 total_outputs.append({k: v.cpu() for k, v in output.items()})
+
+            torch.cuda.empty_cache()
 
         coco_gt_dict = {"images": [], "annotations": [], "categories": []}
 
@@ -189,10 +218,7 @@ class Trainer:
                 x1, y1, x2, y2 = box
                 w, h = x2 - x1, y2 - y1
 
-                # RLE encode (TODO function)
-                arr = np.asfortranarray(mask.astype(np.uint8))
-                rle = mask_utils.encode(arr)
-                rle["counts"] = rle["counts"].decode("utf-8")
+                rle = encode_mask(mask)
 
                 coco_gt_dict["annotations"].append(
                     {
@@ -227,10 +253,7 @@ class Trainer:
                 mask = mask.squeeze()  # (1, H, W) -> (H, W)
                 mask = mask > MASK_THRESHOLD
 
-                # RLE encode (TODO function)
-                arr = np.asfortranarray(mask.astype(np.uint8))
-                rle = mask_utils.encode(arr)
-                rle["counts"] = rle["counts"].decode("utf-8")
+                rle = encode_mask(mask)
 
                 result = {
                     "image_id": image_id,
