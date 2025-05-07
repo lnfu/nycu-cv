@@ -3,7 +3,9 @@
     "image": "lnfu/nycu-cv",
     "runArgs": [
         "--gpus=all",
-        "--shm-size=16gb"
+        "--memory=32g",
+        "--shm-size=20gb",
+        "--memory-swap=36g"
     ],
     "customizations": {
         "vscode": {
