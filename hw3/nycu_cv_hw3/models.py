@@ -52,7 +52,11 @@ class Model(nn.Module):
             # 5 meaning all backbone layers are trainable
             trainable_backbone_layers=5,
             # num_classes=NUM_CLASSES,
-            box_batch_size_per_image=800,
+            rpn_batch_size_per_image=1024,
+            rpn_positive_fraction=0.7,
+            box_batch_size_per_image=1024,
+            box_positive_fraction=0.5,
+            box_detections_per_img=800,
         )
 
         # transform 不要做 normalize

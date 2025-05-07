@@ -236,7 +236,21 @@ inference_loader = torch.utils.data.DataLoader(
 
 
 def main():
-    pass
+    max_instance_count = 0
+    max_instance_image_name = None
+
+    for idx in range(len(all_dataset)):
+        _, target = all_dataset[idx]
+        instance_count = len(target["labels"])
+
+        if instance_count > max_instance_count:
+            max_instance_count = instance_count
+            max_instance_image_name = all_dataset.sample_dirs[idx].name
+
+    print(
+        f"Maximum number of instances in a single image: {max_instance_count}"
+    )
+    print(f"Image with most instances: {max_instance_image_name}")
 
 
 if __name__ == "__main__":

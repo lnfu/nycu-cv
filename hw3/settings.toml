@@ -9,11 +9,13 @@ step_size = 5
 gamma=0.1
 
 [dev]
-num_epochs = 50
+num_epochs = 40
 batch_size = 2
 
-learning_rate = 0.005
-weight_decay = 0.0
+learning_rate = 1e-3
+weight_decay = 0
 momentum = 0.9
-step_size = 10
-gamma=0.5
+factor = 0.5
+patience = 3
+swa_lr = 1e-5
+anneal_epochs = 1

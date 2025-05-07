@@ -21,6 +21,8 @@ class Trainer:
         train_id: str,
         device,
         description: str,
+        swa_model,
+        swa_scheduler,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -38,6 +40,9 @@ class Trainer:
 
         self.scaler = torch.amp.GradScaler()
 
+        self.swa_model = swa_model
+        self.swa_scheduler = swa_scheduler
+
     def train(self, num_epochs: int):
         min_val_loss = float("inf")
 
@@ -46,9 +51,23 @@ class Trainer:
             val_loss = self.val_loss(epoch)
             val_ap_metrics = self.val_ap_metrics(epoch)
 
-            if self.lr_scheduler:
-                self.lr_scheduler.step()
+            # TODO
+            if epoch > num_epochs - 10:
+                self.swa_model.update_parameters(self.model)
+                self.swa_scheduler.step()
+                self.save_checkpoint(epoch, True)
 
+            else:
+
+                if self.lr_scheduler:
+                    # self.lr_scheduler.step(val_loss)
+                    self.lr_scheduler.step()
+
+                if val_loss < min_val_loss:
+                    min_val_loss = val_loss
+                    self.save_checkpoint(epoch, False)
+
+            # tensorboard
             self.writer.add_scalars(
                 "Loss",
                 {
@@ -75,10 +94,6 @@ class Trainer:
                 run_name=self.train_id,
                 global_step=epoch,
             )
-
-            if val_loss < min_val_loss:
-                min_val_loss = val_loss
-                self.save_checkpoint(epoch)
 
     def loss_fn(self, loss_dict):
         # sum(loss for loss in loss_dict.values())
@@ -288,12 +303,15 @@ class Trainer:
             metrics[f"{iou_type}/ar"] = coco_eval.stats[8]
         return metrics
 
-    def save_checkpoint(self, epoch: int):
+    def save_checkpoint(self, epoch: int, use_swa: bool = False):
+        model_to_save = self.swa_model if use_swa else self.model
+
         torch.save(
             {
                 "epoch": epoch,
-                "model_state_dict": self.model.state_dict(),
+                "model_state_dict": model_to_save.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
             },
-            MODEL_DIR_PATH / f"{self.train_id}_{epoch}.pth",
+            MODEL_DIR_PATH
+            / f"{self.train_id}_{epoch}{'_swa' if use_swa else ''}.pth",
         )

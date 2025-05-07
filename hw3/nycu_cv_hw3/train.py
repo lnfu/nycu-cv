@@ -9,8 +9,9 @@ from nycu_cv_hw3.data import train_loader, val_loader
 from nycu_cv_hw3.models import Model
 from nycu_cv_hw3.trainer import Trainer
 from nycu_cv_hw3.utils import eprint
+from torch.optim.swa_utils import SWALR, AveragedModel
 
-# from torch.optim.swa_utils import SWALR, AveragedModel
+# from timm.scheduler import CosineLRScheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,21 +38,40 @@ def main(description: str):
     logging.info(f"{device=}")
 
     model = Model().to(device)
-    # swa_model = AveragedModel(model).to(device)
+    swa_model = AveragedModel(model).to(device)
 
     # Optimizer
     # optimizer = optim.AdamW(
     #     [p for p in model.parameters() if p.requires_grad],
     #     lr=settings.learning_rate,
     # )
+
+    # param_groups = [
+    #     {"params": model.maskrcnn.backbone.parameters(), "lr": 5e-3},
+    #     {"params": model.maskrcnn.rpn.parameters(), "lr": 5e-3},
+    #     {"params": model.maskrcnn.roi_heads.parameters(), "lr": 5e-3},
+    # ]
     optimizer = optim.SGD(
         [p for p in model.parameters() if p.requires_grad],
-        lr=settings.learning_rate,
-        weight_decay=settings.weight_decay,
-        momentum=settings.momentum,
+        # param_groups,
+        lr=5e-3,
+        weight_decay=0,
+        momentum=0.9,
     )
-    # swa_scheduler = SWALR(optimizer, swa_lr=0.0005)  # TODO setting
+    swa_scheduler = SWALR(
+        optimizer,
+        swa_lr=settings.swa_lr,
+        anneal_epochs=settings.anneal_epochs,
+    )
 
+    # lr_scheduler = CosineLRScheduler(
+    #     optimizer,
+    #     t_initial=30,
+    #     warmup_t=5,
+    #     warmup_lr_init=1e-5,
+    #     lr_min=1e-4,
+    #     t_in_epochs=True,
+    # )
     # optimizer = optim.SGD(
     #     model.parameters(),
     #     lr=settings.learning_rate,
@@ -59,10 +79,16 @@ def main(description: str):
     #     weight_decay=settings.weight_decay,
     # )
 
+    # lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    #     optimizer,
+    #     mode="min",
+    #     factor=settings.factor,
+    #     patience=settings.patience,
+    #     verbose=True,
+    # )
+
     lr_scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer,
-        step_size=settings.step_size,
-        gamma=settings.gamma,
+        optimizer, step_size=10, gamma=0.5
     )
 
     trainer = Trainer(
@@ -74,6 +100,8 @@ def main(description: str):
         train_id=current_time,
         device=device,
         description=description,
+        swa_model=swa_model,
+        swa_scheduler=swa_scheduler,
     )
 
     try:
@@ -83,7 +111,7 @@ def main(description: str):
     except KeyboardInterrupt:
         eprint("Training interrupted! Saving model before exiting...")
     finally:
-        trainer.save_checkpoint(-1)
+        pass
 
 
 if __name__ == "__main__":
