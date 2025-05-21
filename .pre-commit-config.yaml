@@ -18,7 +18,9 @@ repos:
     rev: "7.2.0"
     hooks:
       - id: flake8
-        args: ["/workspaces/nycu-cv"]
+        args: ["--ignore=E203,E262,E265,E266,W503", "/workspaces/nycu-cv"]
+        exclude: |
+          ^hw4/nycu_cv_hw4/utils\.py$|
 
   - repo: https://github.com/jendrikseipp/vulture
     rev: "v2.14"

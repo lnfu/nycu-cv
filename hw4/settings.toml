@@ -1,0 +1,9 @@
+[default]
+train_ratio = 0.8
+lr = 2e-4
+batch_size = 4
+
+[dev]
+train_ratio = 0.7
+lr = 2e-4
+batch_size = 4

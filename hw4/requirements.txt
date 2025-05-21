@@ -1,0 +1,8 @@
+matplotlib==3.10.1
+dynaconf==3.2.10
+click==8.1.8
+tqdm==4.67.1
+pycocotools==2.0.8
+tensorboard==2.19.0
+einops==0.8.1
+kornia==0.8.1

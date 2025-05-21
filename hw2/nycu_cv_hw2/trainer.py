@@ -300,9 +300,7 @@ class Trainer:
             )
 
             logging.info(
-                f"Epoch {
-                    epoch +
-                    1}: Train Loss: {
+                f"Epoch {epoch + 1}: Train Loss: {
                     train_loss:.3f}, Val Loss: {
                     val_loss:.3f}",
             )

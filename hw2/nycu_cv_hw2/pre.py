@@ -121,7 +121,7 @@ def print_size_histogram(data, bin_width=2):
 
     # 印出每個區間的資料數量
     for i in range(len(hist)):
-        print(f"{bin_edges[i]:.2f} - {bin_edges[i+1]:.2f}: {hist[i]}")
+        print(f"{bin_edges[i]:.2f} - {bin_edges[i + 1]:.2f}: {hist[i]}")
 
 
 # 打印 sizes 每 2 單位區間的資料數量
