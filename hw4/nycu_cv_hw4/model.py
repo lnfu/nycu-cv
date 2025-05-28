@@ -272,7 +272,7 @@ class OverlapPatchEmbed(nn.Module):
 ##---------- Prompt Gen Module -----------------------
 class PromptGenBlock(nn.Module):
     def __init__(
-        self, prompt_dim=128, prompt_len=5, prompt_size=96, lin_dim=192
+        self, prompt_dim=128, prompt_len=8, prompt_size=96, lin_dim=192
     ):
         super(PromptGenBlock, self).__init__()
         self.prompt_param = nn.Parameter(
@@ -329,13 +329,13 @@ class PromptIR(nn.Module):
 
         if self.decoder:
             self.prompt1 = PromptGenBlock(
-                prompt_dim=64, prompt_len=5, prompt_size=64, lin_dim=96
+                prompt_dim=64, prompt_len=8, prompt_size=64, lin_dim=96
             )
             self.prompt2 = PromptGenBlock(
-                prompt_dim=128, prompt_len=5, prompt_size=32, lin_dim=192
+                prompt_dim=128, prompt_len=8, prompt_size=32, lin_dim=192
             )
             self.prompt3 = PromptGenBlock(
-                prompt_dim=320, prompt_len=5, prompt_size=16, lin_dim=384
+                prompt_dim=320, prompt_len=8, prompt_size=16, lin_dim=384
             )
 
         self.chnl_reduce1 = nn.Conv2d(64, 64, kernel_size=1, bias=bias)

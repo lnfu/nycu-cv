@@ -1,3 +1,4 @@
+# TODO crop_img (utils.py) 這次作業都是 256x256 所以不用處理
 from pathlib import Path
 
 import kornia.augmentation as K
@@ -9,26 +10,34 @@ from nycu_cv_hw4.utils import random_crop_patch
 from PIL import Image
 from torch.utils.data import Dataset
 
-# TODO crop_img (utils.py) 這次作業都是 256x256 所以不用處理
-
 
 class PromptTrainDataset(Dataset):
-    def __init__(self, data_dir: Path, train: bool = True):
+    train: bool
+    patch_size: int
+
+    def __init__(
+        self,
+        data_dir: Path,
+        de_types=["derain", "desnow"],
+        train: bool = True,
+        patch_size: int = 128,
+    ):
         super(PromptTrainDataset, self).__init__()
         self.train = train
+        self.patch_size = patch_size
 
         if train:
-            self.augment = AugmentationSequential(
+            self.consistent_augment = AugmentationSequential(
                 K.RandomHorizontalFlip(p=0.5),
                 same_on_batch=True,
             )
         else:
-            self.augment = None
+            self.consistent_augment = None
 
         self.de_dict = {"derain": 0, "desnow": 1}
 
-        self.de_types = self.de_dict.keys()  # TODO remove
-
+        # self.de_types = self.de_dict.keys()  # TODO remove
+        self.de_types = de_types
         total_de_paths = list()
         total_clean_paths = list()
         total_de_types = list()
@@ -71,7 +80,12 @@ class PromptTrainDataset(Dataset):
         clean_img = np.array(Image.open(clean_path).convert("RGB"))  # 0 - 255
 
         # H, W, C
-        de_patch, clean_patch = random_crop_patch(de_img, clean_img, 128)
+        if self.train:
+            de_patch, clean_patch = random_crop_patch(
+                de_img, clean_img, self.patch_size
+            )
+        else:
+            de_patch, clean_patch = de_img, clean_img
 
         # C, H, W
         de_patch = image_to_tensor(de_patch, keepdim=False).float() / 255.0
@@ -79,13 +93,12 @@ class PromptTrainDataset(Dataset):
             image_to_tensor(clean_patch, keepdim=False).float() / 255.0
         )
 
-        # de_patch = de_patch.unsqueeze(0)  # [1, 3, H, W]
-        # clean_patch = clean_patch.unsqueeze(0)  # [1, 3, H, W]
-
-        if self.augment:
+        if self.consistent_augment:
             stacked = torch.cat([de_patch, clean_patch], dim=0)  # [2, 3, H, W]
-            stacked = self.augment(stacked)
+            stacked = self.consistent_augment(stacked)
             de_patch, clean_patch = stacked[0], stacked[1]
+        else:
+            de_patch, clean_patch = de_patch[0], clean_patch[0]
 
         # visualize_pair(image_id, de_patch, clean_patch)
 

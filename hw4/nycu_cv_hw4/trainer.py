@@ -1,39 +1,75 @@
-import datetime
 import gc
 import heapq
 from pathlib import Path
 
 import torch
 import tqdm
-from nycu_cv_hw4.config import settings
-from nycu_cv_hw4.constants import LOG_DIR_PATH, MODEL_DIR_PATH
-from torch import nn, optim
+from nycu_cv_hw4.constants import DATA_DIR_PATH, LOG_DIR_PATH, MODEL_DIR_PATH
+from nycu_cv_hw4.data import PromptTrainDataset
+from nycu_cv_hw4.utils import compute_psnr
+from pytorch_msssim import ms_ssim
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 
 class Trainer:
+
+    def rebuild_dataloader(
+        self, de_types=["derain", "desnow"], patch_size=128, batch_size=1
+    ):
+        dataset = PromptTrainDataset(
+            DATA_DIR_PATH / "train", de_types, patch_size=patch_size
+        )
+
+        # train_size = int(settings.train_ratio * len(dataset))
+        # train_set, val_set = torch.utils.data.random_split(
+        #     dataset, [train_size, len(dataset) - train_size]
+        # )
+
+        train_set = dataset
+
+        # train_set.dataset.train = True
+        train_set.train = True
+        # val_set.dataset.train = False
+
+        self.train_loader = DataLoader(
+            train_set,
+            batch_size=batch_size,
+            pin_memory=True,
+            shuffle=True,
+            drop_last=True,
+            num_workers=16,
+            # generator=torch.Generator().manual_seed(SEED),
+        )
+
+        # self.val_loader = DataLoader(
+        #     val_set,
+        #     batch_size=1,  # TODO
+        #     pin_memory=True,
+        #     shuffle=False,
+        #     drop_last=False,
+        #     num_workers=16,
+        #     generator=torch.Generator().manual_seed(SEED),
+        # )
+
     def __init__(
         self,
-        model: nn.Module,
-        train_loader,
-        val_loader,
+        model,
         device: torch.device,
         description: str,
         save_top_k: int = 3,
         save_last: bool = True,
+        run_id="default",
+        # ckpt_path=None, # TODO
     ):
-        self.model = model.to(device)
-        self.train_loader = train_loader
-        self.val_loader = val_loader
+        self.alpha = 0.8
+        self.start_epoch = 1
+
+        self.model = model
         self.device = device
 
-        # loss & optim
-        # TODO loss = L1 + 0.1 * Perceptual + 0.5 * (1 - SSIM)
-        self.loss_fn = nn.L1Loss()
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=settings.lr)
-
         # tensorboard
-        self.id = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.id = run_id
         self.writer = SummaryWriter(LOG_DIR_PATH / self.id)
         self.writer.add_text("description", description)
 
@@ -42,23 +78,69 @@ class Trainer:
         self.save_last = save_last
         self.best_k_models = []  # min-heap of (loss, path)
 
+        # Optimizer
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=2e-4)
+        ckpt = torch.load(
+            MODEL_DIR_PATH / "2025-05-27_15-05-41_epoch=3-loss=0.0193.pth",
+            map_location=device,
+        )
+        self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+
+        # self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        #     self.optimizer, T_max=30, eta_min=1e-4
+        # )
+
+        # Data
+        self.rebuild_dataloader()
+
+    def loss_fn(self, pred, target):
+        if self.alpha == 1.0:
+            return torch.nn.functional.l1_loss(pred, target)
+
+        l1_loss = torch.nn.functional.l1_loss(pred, target)
+        ssim_loss = 1 - ms_ssim(
+            pred, target, data_range=1.0, size_average=True, win_size=7
+        )
+        return self.alpha * l1_loss + (1 - self.alpha) * ssim_loss
+
+    def train_with_curriculum(self, curriculum):
+        for stage_id, stage_cfg in enumerate(curriculum):
+            print(f"==== Stage {stage_id} ====")
+            self.rebuild_dataloader(
+                stage_cfg["de_types"],
+                stage_cfg["patch_size"],
+                stage_cfg["batch_size"],
+            )
+            self.alpha = stage_cfg["alpha"]
+            self.train(stage_cfg["epochs"])
+            self.start_epoch += stage_cfg["epochs"]
+
+            print(f"{self.alpha=}")
+
     def train(self, num_epochs: int):
-        for epoch in range(1, num_epochs + 1):
+
+        for epoch in range(
+            self.start_epoch, self.start_epoch + num_epochs + 1
+        ):
             train_avg_loss = self.train_one_epoch(epoch)
-            val_avg_loss = self.validate(epoch)
+            # val_avg_loss = self.validate(epoch)
 
             print(f"[Epoch {epoch}] TRAIN AVG LOSS: {train_avg_loss:.4f}")
-            print(f"[Epoch {epoch}] VAL AVG LOSS: {val_avg_loss:.4f}")
+            # print(f"[Epoch {epoch}] VAL AVG LOSS: {val_avg_loss:.4f}")
+
+            # self.scheduler.step()
 
             # tensorboard
             self.writer.add_scalars(
                 "Loss",
-                {"train": train_avg_loss, "val": val_avg_loss},
+                {
+                    "train": train_avg_loss,
+                    # "val": val_avg_loss,
+                },
                 global_step=epoch,
             )
 
             # checkpoint
-            # TODO 也考慮 validation
             ckpt_path = self.save_checkpoint(epoch, train_avg_loss)
             self.track_best_checkpoints(train_avg_loss, ckpt_path)
 
@@ -70,12 +152,13 @@ class Trainer:
         self.model.train()
 
         total_loss = 0.0
+        total_psnr = 0.0
         num_samples = 0
 
         for batch in tqdm.tqdm(
             self.train_loader, desc=f"train {epoch}", ncols=100
         ):
-            loss = self.training_step(batch)
+            loss, psnr = self.training_step(batch)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -86,7 +169,12 @@ class Trainer:
             total_loss += loss.item() * batch_size
             num_samples += batch_size
 
+            total_psnr += psnr
+
         avg_loss = total_loss / num_samples if num_samples > 0 else 0.0
+        avg_psnr = total_psnr / num_samples if num_samples > 0 else 0.0
+        print(f"{avg_psnr=}")
+
         return avg_loss
 
     @torch.no_grad()
@@ -94,19 +182,26 @@ class Trainer:
         self.model.eval()
 
         total_loss = 0.0
+        total_psnr = 0.0
         num_samples = 0
 
         for batch in tqdm.tqdm(
-            self.val_loader, desc=f"train {epoch}", ncols=100
+            self.val_loader, desc=f"validate {epoch}", ncols=100
         ):
-            loss = self.training_step(batch)
+            loss, psnr = self.training_step(batch)
 
             # track loss
             batch_size = batch[2].size(0)  # clean_patch
             total_loss += loss.item() * batch_size
             num_samples += batch_size
 
+            total_psnr += psnr
+
         avg_loss = total_loss / num_samples if num_samples > 0 else 0.0
+        avg_psnr = total_psnr / num_samples if num_samples > 0 else 0.0
+
+        print(f"{avg_psnr=}")
+
         return avg_loss
 
     def training_step(self, batch):
@@ -119,7 +214,9 @@ class Trainer:
         restored = self.model(de_patch)
         loss = self.loss_fn(restored, clean_patch)
 
-        return loss
+        psnr = compute_psnr(restored, clean_patch)
+
+        return loss, psnr
 
     def save_checkpoint(self, epoch: int, loss: float) -> Path:
         # Save to path: epoch=E-loss=XX.XX.pth
