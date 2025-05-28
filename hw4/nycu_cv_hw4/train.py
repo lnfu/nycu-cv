@@ -29,7 +29,7 @@ def main(description: str):
     model = model.to(device)
 
     ckpt = torch.load(
-        MODEL_DIR_PATH / "2025-05-27_15-05-41_epoch=3-loss=0.0193.pth",
+        MODEL_DIR_PATH / "2025-05-28_07-14-55_epoch=4-loss=0.0266.pth",
         map_location=device,
     )
     model.load_state_dict(ckpt["model_state_dict"])
@@ -51,7 +51,7 @@ def main(description: str):
         # },
         {
             "de_types": ["desnow", "derain"],
-            "patch_size": 256,
+            "patch_size": 200,
             "batch_size": 1,
             "alpha": 1.0,
             "epochs": 20,

@@ -81,7 +81,7 @@ class Trainer:
         # Optimizer
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=2e-4)
         ckpt = torch.load(
-            MODEL_DIR_PATH / "2025-05-27_15-05-41_epoch=3-loss=0.0193.pth",
+            MODEL_DIR_PATH / "2025-05-28_07-14-55_epoch=4-loss=0.0266.pth",
             map_location=device,
         )
         self.optimizer.load_state_dict(ckpt["optimizer_state_dict"])
@@ -93,15 +93,27 @@ class Trainer:
         # Data
         self.rebuild_dataloader()
 
-    def loss_fn(self, pred, target):
-        if self.alpha == 1.0:
-            return torch.nn.functional.l1_loss(pred, target)
+    # def loss_fn(self, pred, target):
+    #     if self.alpha == 1.0:
+    #         return torch.nn.functional.l1_loss(pred, target)
 
-        l1_loss = torch.nn.functional.l1_loss(pred, target)
-        ssim_loss = 1 - ms_ssim(
-            pred, target, data_range=1.0, size_average=True, win_size=7
-        )
-        return self.alpha * l1_loss + (1 - self.alpha) * ssim_loss
+    #     l1_loss = torch.nn.functional.l1_loss(pred, target)
+    #     ssim_loss = 1 - ms_ssim(
+    #         pred, target, data_range=1.0, size_average=True, win_size=7
+    #     )
+    #     return self.alpha * l1_loss + (1 - self.alpha) * ssim_loss
+
+    def loss_fn(self, pred, target, de_type: str):
+        if de_type == "desnow":
+            return torch.nn.functional.l1_loss(pred, target)
+        elif de_type == "derain":
+            l1_loss = torch.nn.functional.l1_loss(pred, target)
+            ssim_loss = 1 - ms_ssim(
+                pred, target, data_range=1.0, size_average=True, win_size=7
+            )
+            return l1_loss + 0.3 * ssim_loss
+        else:
+            raise ValueError(f"Unknown de_type: {de_type}")
 
     def train_with_curriculum(self, curriculum):
         for stage_id, stage_cfg in enumerate(curriculum):
@@ -212,7 +224,10 @@ class Trainer:
         clean_patch = clean_patch.to(self.device)
 
         restored = self.model(de_patch)
-        loss = self.loss_fn(restored, clean_patch)
+
+        inv_de_dict = {0: "derain", 1: "desnow"}
+        de_type = inv_de_dict[de_id.item()]
+        loss = self.loss_fn(restored, clean_patch, de_type)
 
         psnr = compute_psnr(restored, clean_patch)
 
